@@ -32,6 +32,21 @@ bool cmp(Tuple a,Tuple b){
 	if(a.termid ==b.termid)return a.docid<b.docid;
 	return a.termid<b.termid;
 }
+bool check_valid(string &s){
+	if(s==""||s.size()>=40)return false;
+	int digit_count=0;
+	for(int i=0;i<s.size();i++){
+		digit_count+=(s[i]>='0'&&s[i]<='9');
+	}
+	return digit_count<=20;
+}
+string tolower(string s){
+	for(int i=0;i<s.size();i++){
+		if(s[i]<='Z'&&s[i]>='A')s[i]+=32;
+	}
+	return s;
+}
+
 class Parser{
 public:
 	unordered_map<string,int>lexicon; // map from term to termid
@@ -68,7 +83,8 @@ public:
 		char* pch = strtok ((char*)content.data(),(const char*)delimiters.data());
 		while (pch != NULL){
 			string word(pch, pch + strlen(pch));
-			if(word!=""){
+			if(check_valid(word)){
+				word = tolower(word);
 				int termid = lexicon[word];
 				if(termid == 0) {
 					lexicon[word]=++term_num;

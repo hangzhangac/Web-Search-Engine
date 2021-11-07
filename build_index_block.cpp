@@ -32,8 +32,8 @@ public:
 	long long read_byte;
 	long long offset; // record the current offset
 	string final_lexicon_path; // the path of final lexicon file
-	unordered_map<int,tuple<string, long long, long long, int> >ms; // the final lexicon
-	//						 word ,start offset,end offset,num of docments 
+	unordered_map<int,tuple<string, long long, int, int> >ms; // the final lexicon
+	//						 term ,start offset, size ,num of docments 
 	int block_size;
 	
 	void read_lexicon(string lexicon_path){ // read the lexicon from disk
@@ -45,7 +45,7 @@ public:
 		while (!lex.eof() ){
 			lex>>word>>termid;
 			if(lex.fail())break;
-			ms[termid] = tuple<string, long long, long long, int>(word, 0, 0, 0);
+			ms[termid] = tuple<string, long long, int, int>(word, 0, 0, 0);
 		}
 		end=clock();
 		cout<<"The running time for reading lexicon is "<<(double)(end-start)/CLOCKS_PER_SEC<<" seconds"<<endl;
@@ -139,11 +139,16 @@ public:
 			all_blocks.push_back(block);
 			tmp_doc.clear();tmp_fre.clear();
 		}
-		vector<int>start; // this vector records each block's offset from the start of the first block. 
+		vector<int>start; // this vector records each block's size 
 		int block_offset_len = 0;
+		//for(int i=0;i<all_blocks.size();i++){
+			//start.push_back(block_offset_len);
+			//int cur_size = all_blocks[i].size();
+			//block_offset_len += cur_size;
+		//}
 		for(int i=0;i<all_blocks.size();i++){
-			start.push_back(block_offset_len);
 			int cur_size = all_blocks[i].size();
+			start.push_back(cur_size);
 			block_offset_len += cur_size;
 		}
 		vector<unsigned char>lastdoc = to_bytestream(all_last_docid); // encode last docment ids to varbyte format
@@ -152,9 +157,9 @@ public:
 
 		inverted_list_to_output_buffer(lastdoc,block_offset,all_blocks); // write the whole inverted list to output buffer
 
-		tuple<string, long long, long long, int>& terminfo = ms[termid]; // update the lexicon
+		tuple<string, long long, int, int>& terminfo = ms[termid]; // update the lexicon
 		get<1>(terminfo) = offset; //the start of this inverted list
-		get<2>(terminfo) = offset + overall_byte; // the end of this inverted list
+		get<2>(terminfo) = overall_byte; // the length of this inverted list
 		get<3>(terminfo) = len; // the number of postings in this inverted list
 		//cout<<offset<<' '<<offset + overall_byte<<endl;
 		offset+=overall_byte;

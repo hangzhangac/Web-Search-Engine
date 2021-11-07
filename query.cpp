@@ -24,6 +24,8 @@ const int MAX_DOCID = 3213835;
 unordered_map<int,tuple<string, int, long long> >doctable; //document table, the value is <url, term number, text start offset in trec file>
 unordered_map<string,tuple<long long, long long, int> >lexicon;//lexicon, the value is<startoffset, endoffset, document number>
 double ave_length_d = 1.0; // the average length of documents in the collection
+string trec_path = "../assign2_data/msmarco-docs.trec";
+string lexicon_path = "final_lexicon.txt", doctable_path = "doctable.txt", index_path = "final_index";
 
 //load stopwords
 set<string> load_stopping_words(string stop_words_filepath){
@@ -49,7 +51,7 @@ vector<string> split(const string& str, const string& delim, set<string>&stopwor
 	char *p = strtok(strs, d);
 	while(p) {
 		string s = p;
-		if(stopwords.find(s)==stopwords.end())
+		//if(stopwords.find(s)==stopwords.end())
 			res.push_back(s); 
 		p = strtok(NULL, d);
 	}
@@ -58,6 +60,8 @@ vector<string> split(const string& str, const string& delim, set<string>&stopwor
 
 // load the lexicon and document table from disk
 void readin(string lexicon_path, string doctable_path){
+	clock_t start,end;
+	start = clock();
 	ifstream infile;
 	infile.open(lexicon_path);
 	string line;
@@ -65,7 +69,7 @@ void readin(string lexicon_path, string doctable_path){
 	while(getline(infile,line)){
 		vector<string>res = split(line,"\t",empty_stopwords);
 		assert(res.size()==4);
-		lexicon[res[0]]=tuple<long long, long long, int>(stoll(res[1]),stoll(res[2]),stoi(res[3]));
+		lexicon[res[0]]=tuple<long long, int, int>(stoll(res[1]),stoi(res[2]),stoi(res[3]));
 	}
 	infile.close();
 	long long length = 0;
@@ -80,6 +84,8 @@ void readin(string lexicon_path, string doctable_path){
 	infile.close();
 	cout<<"The size of lexicon: "<<lexicon.size()<<endl<<"The size of docment table: "<<doctable.size()<<endl;
 	cout<<"Loading lexicon and document table finished!"<<endl;
+	end = clock();
+	cout<<"The running time of Loading is "<<(double)(end-start)/CLOCKS_PER_SEC<<" seconds"<<endl;
 	return;
 }
 
@@ -108,7 +114,7 @@ class InvertedList{
 	int last_block_num;// denote the number of documents in the last block
 	vector<int>cur_docids; // decompress one block and cache the document ids in memory
 	vector<int>cur_freqs; // decompress one block and cache the frequency in memory
-	int cur_id;
+	int cur_id; // the pointer shared by nextGEQ and getFreq
 	int sum;// prefix sum of current block
 	
 
@@ -117,15 +123,15 @@ class InvertedList{
 		buffer_length = buffer_id = cur_block = overall_doc_num = block_num = last_block_num = cur_id = sum = 0;
 		cur_block = -1;
 	}
-	void openList(string term){
+	void openList(string term,string index_path = "final_index"){
 		this->term=term;
 		ifstream infile;
-		infile.open("final_index");
+		infile.open(index_path);
 		auto info = lexicon[term];
 		long long offset_start = get<0>(info);
-		long long offset_end = get<1>(info);
+		//long long offset_end = get<1>(info);
 		overall_doc_num = get<2>(info);
-		buffer_length = offset_end-offset_start;
+		buffer_length = get<1>(info);
 		block_num = (overall_doc_num-1)/64+1;
 		
 		buffer = new unsigned char [buffer_length];
@@ -149,7 +155,6 @@ class InvertedList{
 		tmp_buffer = nullptr;
 		buffer_length -= buffer_id;
 		buffer_id=0;
-		printf("open successfully!\n");
 	}
 	int nextGEQ(int k){
 		bool change = false; //will not swith to the next block
@@ -213,8 +218,11 @@ class InvertedList{
 			lastdocid.push_back(VarDecode(buffer_id));
 			cnt++;
 		}
+		int prefix_sum=0;
 		while(buffer_id<buffer_length&&cnt<block_num*2){
-			block_offset.push_back(VarDecode(buffer_id));
+			block_offset.push_back(prefix_sum);
+			int tmp = VarDecode(buffer_id);
+			prefix_sum+=tmp;
 			cnt++;
 		}
 		//cout<<"current buffer id: "<<buffer_id<<" buffer length: "<<buffer_length<<""<<endl;
@@ -315,21 +323,32 @@ bool equal_char(char a, char b){
 	if(b>='A'&&b<='Z')b+=32;
 	return a==b;
 }
+void output_stright_line(){
+	cout<<"------------------------------------------------------------------------"<<endl;
+}
 void snippet_generation(vector<pair<double,int>> &top_result, vector<string>&terms, string delimiters){
-	ifstream infile("../assign2_data/msmarco-docs.trec");
+	ifstream infile(trec_path);
 	set<char> d(delimiters.begin(), delimiters.end());
-	for(auto &x: top_result){
+	for(int top_result_id=0;top_result_id<top_result.size();top_result_id++){
+		auto &x = top_result[top_result_id];
 		int did = x.second;
 		long long start_offset = get<2>(doctable[did]); //get the start offset of the document in trec file
 		infile.seekg(start_offset,ios_base::beg);
 		string line;
-		cout<<"\033[32mDocument id: "<<did<<"\033[0m"<<endl;
-		cout<<"\033[32mBM25 score: "<<x.first<<"\033[0m"<<endl;
+		//output document id, bm25 score and url
+		output_stright_line();
+		cout<<"\033[31mDocument id: "<<did<<"\033[0m"<<"\t";
+		cout<<"\033[31mBM25 score: "<<x.first<<"\033[0m"<<endl;
 		cout<<"Url: "<<"\033[34m"+get<0>(doctable[did])+"\033[0m"<<endl;
+		//output snippet
+		string snippet_line = "";
+		int number_diff_appearance = 0, number_appearance =0 ;
 		while(getline(infile,line)){	
 			if(line=="</TEXT>")break;
 			set<int>insert_begin_position,insert_end_positon;
+			int different_terms = 0;
 			for(auto &term:terms){
+				bool showup=false;
 				for(int i=0;i<line.size();i++){
 					int k=i,j=0;
 					while(j<term.size()&&k<line.size()&&equal_char(line[k],term[j]))k++,j++;
@@ -337,10 +356,20 @@ void snippet_generation(vector<pair<double,int>> &top_result, vector<string>&ter
 					if((i-1<0||d.find(line[i-1])!=d.end())&&(k==line.size()||d.find(line[k])!=d.end())){
 						insert_begin_position.insert(i);//record the position we will insert highlight symbol
 						insert_end_positon.insert(k-1);// record the position we will insert the highlight end symbol
+						if(!showup)different_terms+=(showup=true);
 					}
 				}
 			}
-			if(insert_begin_position.size()==0)continue;
+			//bool show=false;
+			//int last = -0x3f3f3f3f;
+			//for(auto x:insert_begin_position){
+				//if(x-last<=30)show=true;
+				//last = x;
+			//}
+			bool show = true;
+			//if(insert_begin_position.size()<2 ||(!show)||different_terms<number_appearance)continue;
+			if((!show)||different_terms<number_diff_appearance)continue;
+			if(different_terms==number_diff_appearance&&insert_begin_position.size()<number_appearance)continue;
 			string new_line = "";
 			string start_color = "\033[33m", end_color = "\033[0m"; //to highlight the terms
 			for(int i=0;i<line.size();i++){
@@ -348,9 +377,14 @@ void snippet_generation(vector<pair<double,int>> &top_result, vector<string>&ter
 				new_line+=line[i];
 				if(insert_end_positon.find(i)!=insert_end_positon.end())new_line+=end_color;
 			}
-			cout<<new_line<<endl;
+			//cout<<new_line<<endl;
+			number_diff_appearance = different_terms;
+			number_appearance = insert_begin_position.size();
+			snippet_line = new_line;
 		}
+		cout<<snippet_line<<endl;
 	}
+	output_stright_line();
 	infile.close();
 	return;
 }
@@ -363,16 +397,18 @@ void disjunctive(vector<string>terms, string delimiters, int return_number=10){/
 	vector<InvertedList>invertlist(num,InvertedList());
 	unordered_map<int,double>bm25; // record qualified document ids and their scores;
 	for(int i=0;i<num;i++){
-		invertlist[i].openList(terms[i]);
+		invertlist[i].openList(terms[i],index_path);
 		invertlist[i].TAAT(bm25);
 		invertlist[i].closeList();
 	}
-	cout<<"Overall "<<bm25.size()<<" documents"<<endl;
 	vector<pair<double,int>> top_result = Top_result(bm25,return_number);
+	snippet_generation(top_result, terms, delimiters);
+	cout<<"Summary: "<<endl;
+	cout<<"Overall "<<bm25.size()<<" documents"<<endl;
 	for(auto &x:top_result){
 		cout<<"Document id: "<<x.second<<" BM25 score: "<<x.first<<endl;
 	}
-	snippet_generation(top_result, terms, delimiters);
+
 	return;
 }
 
@@ -383,7 +419,7 @@ void conjunctive(vector<string>terms, string delimiters, int return_number=10){/
 	if(num==0)return;
 	vector<InvertedList>invertlist(num,InvertedList());
 	vector<pair<double, int>>BM25_docid; // record qualified document ids and their scores;
-	for(int i=0;i<num;i++)invertlist[i].openList(terms[i]);
+	for(int i=0;i<num;i++)invertlist[i].openList(terms[i],index_path);
 	sort(invertlist.begin(),invertlist.end(),cmp);
 	int did = 0;
 	while(did<=MAX_DOCID){
@@ -405,40 +441,57 @@ void conjunctive(vector<string>terms, string delimiters, int return_number=10){/
 		}
 	}
 	for(int i=0;i<num;i++)invertlist[i].closeList();
-	cout<<"Overall "<<BM25_docid.size()<<" documents"<<endl;
 	vector<pair<double,int>> top_result = Top_result(BM25_docid,return_number);
+	snippet_generation(top_result, terms, delimiters);
+	cout<<"Summary: "<<endl;
+	cout<<"Overall "<<BM25_docid.size()<<" documents"<<endl;
 	for(auto &x:top_result){
 		cout<<"Document id: "<<x.second<<" BM25 score: "<<x.first<<endl;
 	}
-	snippet_generation(top_result, terms, delimiters);
+
 	return;
 }
-int main(){
-	readin("final_lexicon.txt","doctable.txt");
+
+vector<string> dereplication(vector<string>vec){ //eliminate duplicate words in query
+	set<string>s(vec.begin(), vec.end());
+	vec.assign(s.begin(), s.end());
+	for(auto &x :vec) 
+		for(auto &v:x)
+			if(v<='Z'&&v>='A')v+=32;
+	return vec;
+}
+int main(int argc, char *argv[]){
+	if(argc>=2) trec_path = argv[1];
+	if(argc>=3) index_path = argv[2]; 
+	if(argc>=4) lexicon_path = argv[3];
+	if(argc>=5) doctable_path = argv[4];
+	readin(lexicon_path,doctable_path);
 	string query;
 	string delimiters = "\t ,.?#$%():;^*/!-\'\"=><·+~";
 	set<string>stopwords = load_stopping_words("stopping_words.txt");
-	cout<<"Please input your query words: (input \"q\" to exit)"<<endl;
+	cout<<"Please input your query words, conjuntive query by default, append 1 to the end of your query to use disjuntive query: (input \"q\" to exit)"<<endl;
 	while(getline(cin, query)){
 		if(query=="q")break;
-		cout<<query<<endl;
 		clock_t start,end;
 		start=clock();
 		vector<string>terms=split(query,delimiters,stopwords);
 		if(terms.back()=="0"){
 			terms.pop_back();
+			terms = dereplication(terms);
 			conjunctive(terms, delimiters);
 		}
 		else if(terms.back()=="1"){
 			terms.pop_back();
+			terms = dereplication(terms);
 			disjunctive(terms, delimiters);
 		}
 		else{
+			terms = dereplication(terms);
 			conjunctive(terms, delimiters);
 		}
 		end=clock();
 		cout<<"The running time for this query is "<<(double)(end-start)/CLOCKS_PER_SEC<<" seconds"<<endl;
-		cout<<"Please input your query words: (input \"q\" to exit)"<<endl;
+		cout<<"Please input your query words, conjuntive query by default, append 1 to the end of your query to use disjuntive query: (input \"q\" to exit)"<<endl;
 	}
 
 	return 0;

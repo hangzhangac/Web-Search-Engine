@@ -2,7 +2,7 @@
 	> File Name: test_index.cpp
     > Full Path: /Users/zhanghang/workspace/WSE/assign2_2/test_index.cpp
 	> Author: Hang Zhang
-	> Created Time: 三 10/ 6 22:07:40 2021
+	> Created Time:  10/6 22:07:40 2021
  ************************************************************************/
 
 #include<iostream>
@@ -41,18 +41,18 @@ int VarDecode(int &i, ifstream& infile){
 void solve(string target,int out_len){
 
 	ifstream infile("final_lexicon.txt");
-	long long offset,offset_end;
+	long long offset;
 	int len;
 	string term;
+	int offset_len;
 	while(1){
-		infile>>term>>offset>>offset_end>>len;
+		infile>>term>>offset>>offset_len>>len;
 		if(term ==target){
 			break;
 		}
 	}
 	infile.close();
 	infile.open("final_index",ios::binary);
-	int offset_len = offset_end-offset;
 	infile.seekg(offset);
 	infile.read((char*)buffer,offset_len);
 	infile.close();
@@ -64,7 +64,7 @@ void solve(string target,int out_len){
 	ofstream ouf("posting_index_for_a_word.txt");
 	vector<int>docid;
 	vector<int>freq;
-	vector<int>lastdocid,offset_block;
+	vector<int>lastdocid,block_size;
 	while(i<offset_len&&cnt<block_num){
 		int tmp = VarDecode(i,infile);
 		cnt++;
@@ -73,16 +73,20 @@ void solve(string target,int out_len){
 	while(i<offset_len&&cnt<block_num*2){
 		int tmp = VarDecode(i,infile);
 		cnt++;
-		offset_block.push_back(tmp);
+		block_size.push_back(tmp);
 	}
 
 	cnt = 0;
 	int cur_block_num=0;
 	int start=i;
 	int idx=0;
+	int prefix_size=0;
 	while(cur_block_num<block_num){
 		int tmp_offset = i-start;
-		if(tmp_offset != offset_block[idx]){
+		//if(tmp_offset != offset_block[idx]){
+			//cout<<"No, offset!"<<endl;
+		//}
+		if(tmp_offset!=prefix_size){
 			cout<<"No, offset!"<<endl;
 		}
 		int last_doc_id = cur_block_num-1>=0? lastdocid[cur_block_num-1]:0;
@@ -102,6 +106,7 @@ void solve(string target,int out_len){
 			int cur= VarDecode(i,infile);
 			freq.push_back(cur);
 		}
+		prefix_size+=block_size[idx];
 		idx++;
 	}
 	for(int j=0;j<min((int)docid.size(),out_len);j++){
