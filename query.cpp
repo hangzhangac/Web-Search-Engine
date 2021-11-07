@@ -289,6 +289,7 @@ bool cmp(InvertedList l1, InvertedList l2){
 
 // Get the top 10 (defaultly) result by BM25 score for DAAT method for conjunctive query
 vector<pair<double,int>> Top_result(vector<pair<double, int>>&BM25_docid,int return_number){
+	cout<<"Conjunctive top result!"<<endl;
 	vector<pair<double,int>> res;
 	priority_queue< pair<double,int>, vector< pair<double,int> >, greater< pair<double,int> >  >pq;
 	for(int i=0;i<BM25_docid.size();i++){
@@ -304,6 +305,7 @@ vector<pair<double,int>> Top_result(vector<pair<double, int>>&BM25_docid,int ret
 
 // Get the top 10 (defaultly) result by BM25 score for TAAT method for disjunctive query
 vector<pair<double,int>> Top_result(unordered_map<int,double>&bm25,int return_number){
+	cout<<"Disjunctive top result!"<<endl;
 	vector<pair<double,int>> res;
 	priority_queue< pair<double,int>, vector< pair<double,int> >, greater< pair<double,int> >  >pq;
 	for(auto &x:bm25){
@@ -317,7 +319,6 @@ vector<pair<double,int>> Top_result(unordered_map<int,double>&bm25,int return_nu
 	return res;
 }
 
-//snippet generation
 bool equal_char(char a, char b){
 	if(a>='A'&&a<='Z')a+=32;
 	if(b>='A'&&b<='Z')b+=32;
@@ -326,6 +327,7 @@ bool equal_char(char a, char b){
 void output_stright_line(){
 	cout<<"------------------------------------------------------------------------"<<endl;
 }
+//snippet generation
 void snippet_generation(vector<pair<double,int>> &top_result, vector<string>&terms, string delimiters){
 	ifstream infile(trec_path);
 	set<char> d(delimiters.begin(), delimiters.end());
@@ -390,7 +392,7 @@ void snippet_generation(vector<pair<double,int>> &top_result, vector<string>&ter
 }
 
 // TAAT method for disjunctive query
-void disjunctive(vector<string>terms, string delimiters, int return_number=10){// flag=0: conjunctive  flag=1: disjunctive queries
+void disjunctive(vector<string>terms, string delimiters, int return_number=20){
 	cout<<"Disjunctive query in TAAT"<<endl;
 	int num=terms.size();
 	if(num==0)return;
@@ -413,7 +415,7 @@ void disjunctive(vector<string>terms, string delimiters, int return_number=10){/
 }
 
 //DAAT method for conjunctive query
-void conjunctive(vector<string>terms, string delimiters, int return_number=10){// flag=0: conjunctive  flag=1: disjunctive queries
+void conjunctive(vector<string>terms, string delimiters, int return_number=20){
 	cout<<"Conjunctive query in DAAT"<<endl;
 	int num=terms.size();
 	if(num==0)return;
