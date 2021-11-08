@@ -81,7 +81,7 @@ class Load{
 };
 
 // merge all intermedia posting files into one target file, and return the target file's path
-string solve(vector<string>&paths, int round, int num, string dir){
+string merge_to_one_file(vector<string>&paths, int round, int num, string dir){
 	vector<Load*>load; 
 	Tuple *output_buffer=new Tuple [output_buffer_length];
 	int id = 0; // the index for output_buffer_length		
@@ -147,13 +147,13 @@ int main(int argc, char *argv[]){
 		for(int i=0;i<paths.size();i++){
 			tmp.push_back(paths[i]);
 			if(tmp.size()==16){ // merge 16 files into one file once
-				new_path.push_back(solve(tmp,round,num,dir));
+				new_path.push_back(merge_to_one_file(tmp,round,num,dir));
 				num++;
 				tmp.clear();
 			}
 		}
 		if(tmp.size()){
-			new_path.push_back(solve(tmp,round,num++,dir));
+			new_path.push_back(merge_to_one_file(tmp,round,num++,dir));
 		}
 		paths=new_path;
 		round++;

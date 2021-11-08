@@ -132,6 +132,7 @@ class InvertedList{
 		//long long offset_end = get<1>(info);
 		overall_doc_num = get<2>(info);
 		buffer_length = get<1>(info);
+		cout<<"The length of the inverted list of <"<<term<<"> is "<<buffer_length<<endl;
 		block_num = (overall_doc_num-1)/64+1;
 		
 		buffer = new unsigned char [buffer_length];
@@ -251,7 +252,7 @@ class InvertedList{
 	}
 
 	//TAAT method for disjunctive query
-	void TAAT(unordered_map<int,double>&bm25){
+	void TAAT(unordered_map<int,double>&bm25, string term, unordered_map<int,map<string,double>>&docid_term_score){
 		while(cur_block<block_num){
 			if(cur_block==-1){
 				cur_block++;
@@ -267,8 +268,9 @@ class InvertedList{
 			while(cur_id<cur_docids.size()){
 				int cur_docid = sum + cur_docids[cur_id];
 				int cur_freq = cur_freqs[cur_id];
-				//BM25_score+=compute_BM25((int)doctable.size(), invertlist[i].overall_doc_num, invertlist[i].getFreq(did), doctable[did].second,
-				bm25[cur_docid]+= compute_BM25((int)doctable.size(), overall_doc_num, cur_freq, get<1>(doctable[cur_docid]), ave_length_d);
+				double cur_score = compute_BM25((int)doctable.size(), overall_doc_num, cur_freq, get<1>(doctable[cur_docid]), ave_length_d);
+				docid_term_score[cur_docid][term]+=cur_score;
+				bm25[cur_docid] += cur_score;
 				sum+=cur_docids[cur_id];
 				cur_id++;
 			}
@@ -289,7 +291,6 @@ bool cmp(InvertedList l1, InvertedList l2){
 
 // Get the top 10 (defaultly) result by BM25 score for DAAT method for conjunctive query
 vector<pair<double,int>> Top_result(vector<pair<double, int>>&BM25_docid,int return_number){
-	cout<<"Conjunctive top result!"<<endl;
 	vector<pair<double,int>> res;
 	priority_queue< pair<double,int>, vector< pair<double,int> >, greater< pair<double,int> >  >pq;
 	for(int i=0;i<BM25_docid.size();i++){
@@ -304,8 +305,7 @@ vector<pair<double,int>> Top_result(vector<pair<double, int>>&BM25_docid,int ret
 }
 
 // Get the top 10 (defaultly) result by BM25 score for TAAT method for disjunctive query
-vector<pair<double,int>> Top_result(unordered_map<int,double>&bm25,int return_number){
-	cout<<"Disjunctive top result!"<<endl;
+vector<pair<double,int>> Top_result(unordered_map<int,double>&bm25,int return_number/*, unordered<int, map<string,double>>&docid_term_score*/){
 	vector<pair<double,int>> res;
 	priority_queue< pair<double,int>, vector< pair<double,int> >, greater< pair<double,int> >  >pq;
 	for(auto &x:bm25){
@@ -328,7 +328,7 @@ void output_stright_line(){
 	cout<<"------------------------------------------------------------------------"<<endl;
 }
 //snippet generation
-void snippet_generation(vector<pair<double,int>> &top_result, vector<string>&terms, string delimiters){
+void snippet_generation(vector<pair<double,int>> &top_result, vector<string>&terms, string delimiters, unordered_map<int,map<string,double>>&docid_term_score){
 	ifstream infile(trec_path);
 	set<char> d(delimiters.begin(), delimiters.end());
 	for(int top_result_id=0;top_result_id<top_result.size();top_result_id++){
@@ -339,12 +339,16 @@ void snippet_generation(vector<pair<double,int>> &top_result, vector<string>&ter
 		string line;
 		//output document id, bm25 score and url
 		output_stright_line();
-		cout<<"\033[31mDocument id: "<<did<<"\033[0m"<<"\t";
-		cout<<"\033[31mBM25 score: "<<x.first<<"\033[0m"<<endl;
+		cout<<"\033[31mDocument id: "<<did<<"\t"<<"Document length: "<<get<1>(doctable[did])<<"\t"<<"BM25 score: "<<x.first<<"\033[0m"<<endl;
+		map<string,double>&terms_score = docid_term_score[did];
+		for(auto &x:terms_score)cout<<"\033[33m"<<x.first<<" "<<x.second<<"\033[0m"<<"\t";
+		cout<<endl;
+
 		cout<<"Url: "<<"\033[34m"+get<0>(doctable[did])+"\033[0m"<<endl;
 		//output snippet
 		string snippet_line = "";
 		int number_diff_appearance = 0, number_appearance =0 ;
+		int begin_index = 0;
 		while(getline(infile,line)){	
 			if(line=="</TEXT>")break;
 			set<int>insert_begin_position,insert_end_positon;
@@ -383,7 +387,10 @@ void snippet_generation(vector<pair<double,int>> &top_result, vector<string>&ter
 			number_diff_appearance = different_terms;
 			number_appearance = insert_begin_position.size();
 			snippet_line = new_line;
+			begin_index = *insert_begin_position.begin();
 		}
+		if(snippet_line.size()>2000)
+			snippet_line = (begin_index==0 ? "" : "...") + snippet_line.substr(begin_index,min(2000,(int)snippet_line.size()-begin_index))+"...";
 		cout<<snippet_line<<endl;
 	}
 	output_stright_line();
@@ -392,30 +399,39 @@ void snippet_generation(vector<pair<double,int>> &top_result, vector<string>&ter
 }
 
 // TAAT method for disjunctive query
-void disjunctive(vector<string>terms, string delimiters, int return_number=20){
+void disjunctive(vector<string>terms, string delimiters, int return_number=10){
 	cout<<"Disjunctive query in TAAT"<<endl;
 	int num=terms.size();
 	if(num==0)return;
 	vector<InvertedList>invertlist(num,InvertedList());
 	unordered_map<int,double>bm25; // record qualified document ids and their scores;
+	unordered_map<int,map<string,double>>docid_term_score;
 	for(int i=0;i<num;i++){
 		invertlist[i].openList(terms[i],index_path);
-		invertlist[i].TAAT(bm25);
+		invertlist[i].TAAT(bm25,terms[i],docid_term_score);
 		invertlist[i].closeList();
 	}
 	vector<pair<double,int>> top_result = Top_result(bm25,return_number);
-	snippet_generation(top_result, terms, delimiters);
+	snippet_generation(top_result, terms, delimiters,docid_term_score);
 	cout<<"Summary: "<<endl;
 	cout<<"Overall "<<bm25.size()<<" documents"<<endl;
 	for(auto &x:top_result){
-		cout<<"Document id: "<<x.second<<" BM25 score: "<<x.first<<endl;
+		cout.setf(ios::left);
+		string line = "Document id: "+to_string(x.second);
+		cout<<setfill(' ')<<setw(25)<<line;
+		line = "Document length: " + to_string(get<1>(doctable[x.second]));
+		cout<<setfill(' ')<<setw(25)<<line;
+		line = "BM25 score: " + to_string(x.first);
+		cout<<setfill(' ')<<setw(25)<<line<<endl;
 	}
-
+	//for(auto &x:top_result){
+		//cout<<"Document id: "<<x.second<<" Document length: "<<get<1>(doctable[x.second])<<" BM25 score: "<<x.first<<endl;
+	//}
 	return;
 }
 
 //DAAT method for conjunctive query
-void conjunctive(vector<string>terms, string delimiters, int return_number=20){
+void conjunctive(vector<string>terms, string delimiters, int return_number=10){
 	cout<<"Conjunctive query in DAAT"<<endl;
 	int num=terms.size();
 	if(num==0)return;
@@ -424,6 +440,7 @@ void conjunctive(vector<string>terms, string delimiters, int return_number=20){
 	for(int i=0;i<num;i++)invertlist[i].openList(terms[i],index_path);
 	sort(invertlist.begin(),invertlist.end(),cmp);
 	int did = 0;
+	unordered_map<int, map<string,double>>docid_term_score;
 	while(did<=MAX_DOCID){
 		did  = invertlist[0].nextGEQ(did);
 		if(did>MAX_DOCID)break;
@@ -435,7 +452,10 @@ void conjunctive(vector<string>terms, string delimiters, int return_number=20){
 			double BM25_score = 0.0;
 			int terms_num = get<1>(doctable[did]);
 			for(int i=0;i<num;i++){
-				BM25_score+=compute_BM25((int)doctable.size(), invertlist[i].overall_doc_num, invertlist[i].getFreq(did), terms_num, ave_length_d );	
+				double cur_score = compute_BM25((int)doctable.size(), invertlist[i].overall_doc_num, invertlist[i].getFreq(did), terms_num, ave_length_d );
+				docid_term_score[did][terms[i]]+=cur_score;
+				BM25_score+=cur_score;
+				//BM25_score+=compute_BM25((int)doctable.size(), invertlist[i].overall_doc_num, invertlist[i].getFreq(did), terms_num, ave_length_d );	
 			}
 			BM25_docid.push_back({BM25_score,did});
 
@@ -444,11 +464,18 @@ void conjunctive(vector<string>terms, string delimiters, int return_number=20){
 	}
 	for(int i=0;i<num;i++)invertlist[i].closeList();
 	vector<pair<double,int>> top_result = Top_result(BM25_docid,return_number);
-	snippet_generation(top_result, terms, delimiters);
+	snippet_generation(top_result, terms, delimiters, docid_term_score);
 	cout<<"Summary: "<<endl;
 	cout<<"Overall "<<BM25_docid.size()<<" documents"<<endl;
 	for(auto &x:top_result){
-		cout<<"Document id: "<<x.second<<" BM25 score: "<<x.first<<endl;
+		cout.setf(ios::left);
+		string line = "Document id: "+to_string(x.second);
+		cout<<setfill(' ')<<setw(25)<<line;
+		line = "Document length: " + to_string(get<1>(doctable[x.second]));
+		cout<<setfill(' ')<<setw(25)<<line;
+		line = "BM25 score: " + to_string(x.first);
+		cout<<setfill(' ')<<setw(25)<<line<<endl;
+		//cout<<"Document id: "<<x.second<<" Document length: "<<get<1>(doctable[x.second])<<" BM25 score: "<<x.first<<endl;
 	}
 
 	return;
@@ -471,7 +498,7 @@ int main(int argc, char *argv[]){
 	string query;
 	string delimiters = "\t ,.?#$%():;^*/!-\'\"=><·+~";
 	set<string>stopwords = load_stopping_words("stopping_words.txt");
-	cout<<"Please input your query words, conjuntive query by default, append 1 to the end of your query to use disjuntive query: (input \"q\" to exit)"<<endl;
+	cout<<"\033[33mPlease input your query words, conjuntive query by default, append 1 to the end of your query to use disjuntive query: (input \"q\" to exit)\033[0m"<<endl;
 	while(getline(cin, query)){
 		if(query=="q")break;
 		clock_t start,end;
@@ -493,7 +520,7 @@ int main(int argc, char *argv[]){
 		}
 		end=clock();
 		cout<<"The running time for this query is "<<(double)(end-start)/CLOCKS_PER_SEC<<" seconds"<<endl;
-		cout<<"Please input your query words, conjuntive query by default, append 1 to the end of your query to use disjuntive query: (input \"q\" to exit)"<<endl;
+		cout<<"\033[33mPlease input your query words, conjuntive query by default, append 1 to the end of your query to use disjuntive query: (input \"q\" to exit)\033[0m"<<endl;
 	}
 
 	return 0;
