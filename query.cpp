@@ -420,11 +420,15 @@ class Query{
 			vector<InvertedList>invertlist(num);
 			unordered_map<int,double>bm25; // record qualified document ids and their scores;
 			unordered_map<int,map<string,double>>docid_term_score;
+			int suc_num=0;
 			for(int i=0;i<num;i++){
-				invertlist[i].openList(terms[i],index_path);
+				bool suc = invertlist[i].openList(terms[i],index_path);
+				if(!suc)continue;
+				suc_num++;
 				invertlist[i].TAAT(bm25,terms[i],docid_term_score,ave_length_d);
 				invertlist[i].closeList();
 			}
+			if(suc_num==0)return;
 			vector<pair<double,int>> top_result = Top_result(bm25,return_number);
 			snippet_generation(top_result, terms, delimiters,docid_term_score);
 			cout<<"Summary: "<<endl;
