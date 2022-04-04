@@ -55,6 +55,8 @@ vector<string> split(const string& str, const string& delim, set<string>&stopwor
 			res.push_back(s); 
 		p = strtok(NULL, d);
 	}
+	delete[] strs;
+	delete[] d;
 	return res;
 }
 
