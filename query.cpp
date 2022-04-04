@@ -125,7 +125,7 @@ class InvertedList{
 		buffer_length = buffer_id = cur_block = overall_doc_num = block_num = last_block_num = cur_id = sum = 0;
 		cur_block = -1;
 	}
-	void openList(string term,string index_path = "final_index"){
+	bool openList(string term,string index_path = "final_index"){
 		this->term=term;
 		ifstream infile;
 		infile.open(index_path);
@@ -135,6 +135,7 @@ class InvertedList{
 		overall_doc_num = get<2>(info);
 		buffer_length = get<1>(info);
 		cout<<"The length of the inverted list of <"<<term<<"> is "<<buffer_length<<endl;
+		if(buffer_length==0) return false;
 		block_num = (overall_doc_num-1)/64+1;
 		
 		buffer = new unsigned char [buffer_length];
@@ -158,6 +159,7 @@ class InvertedList{
 		tmp_buffer = nullptr;
 		buffer_length -= buffer_id;
 		buffer_id=0;
+		return true;
 	}
 	int nextGEQ(int k){
 		bool change = false; //will not swith to the next block
@@ -444,9 +446,15 @@ class Query{
 			cout<<"Conjunctive query in DAAT"<<endl;
 			int num=terms.size();
 			if(num==0)return;
-			vector<InvertedList>invertlist(num,InvertedList());
+			vector<InvertedList>invertlist;
 			vector<pair<double, int>>BM25_docid; // record qualified document ids and their scores;
-			for(int i=0;i<num;i++)invertlist[i].openList(terms[i],index_path);
+			for(int i=0;i<num;i++){
+				InvertedList tmp;
+				bool suc = tmp.openList(terms[i],index_path);
+				if(suc) invertlist.push_back(tmp);
+			}
+			num = invertlist.size();
+			if(num==0)return;
 			sort(invertlist.begin(),invertlist.end(),cmp);
 			int did = 0;
 			unordered_map<int, map<string,double>>docid_term_score;
