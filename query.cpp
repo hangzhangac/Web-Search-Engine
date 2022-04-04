@@ -413,7 +413,7 @@ class Query{
 			cout<<"Disjunctive query in TAAT"<<endl;
 			int num=terms.size();
 			if(num==0)return;
-			vector<InvertedList>invertlist(num,InvertedList());
+			vector<InvertedList>invertlist(num);
 			unordered_map<int,double>bm25; // record qualified document ids and their scores;
 			unordered_map<int,map<string,double>>docid_term_score;
 			for(int i=0;i<num;i++){
